@@ -74,7 +74,9 @@
   .board{
     display:grid;gap:8px;width:100%;aspect-ratio:1/1;
     touch-action:manipulation;
+    visibility:hidden;                 /* numbers stay hidden until "Go!" */
   }
+  body.playing .board{visibility:visible;}
   .cell{
     display:flex;align-items:center;justify-content:center;
     background:linear-gradient(180deg,#262c50,#1f243e);border:1px solid var(--border);border-radius:12px;
@@ -99,6 +101,15 @@
   .overlay .big{font-size:40px;font-weight:800;color:var(--accent-2);margin:8px 0;font-variant-numeric:tabular-nums;}
   .hidden{display:none!important;}
 
+  /* Countdown before a round — fully opaque so the board can't be seen */
+  .count-overlay{background:var(--bg-2);backdrop-filter:none;}
+  .count-num{
+    font-size:clamp(64px,22vw,112px);font-weight:800;color:var(--accent-2);
+    font-variant-numeric:tabular-nums;line-height:1;text-shadow:0 0 30px rgba(61,220,151,.4);
+  }
+  @keyframes countPop{0%{opacity:0;transform:scale(.4)}30%{opacity:1;transform:scale(1.06)}55%{transform:scale(1)}100%{opacity:.9;transform:scale(1)}}
+  .count-pop{animation:countPop .8s ease;}
+
   .btn{
     background:linear-gradient(180deg,var(--accent),#5765e6);color:#fff;border:none;border-radius:12px;
     padding:14px 26px;font-size:16px;font-weight:800;cursor:pointer;margin-top:14px;box-shadow:var(--shadow);
@@ -122,8 +133,13 @@
 
   /* Leaderboard */
   .lb-panel{max-width:520px;margin-left:auto;margin-right:auto;margin-top:12px;}
-  .lb-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-  .lb-head h3{margin:0;font-size:15px;letter-spacing:.3px;}
+  .lb-head{display:flex;align-items:center;justify-content:center;}
+  .lb-tabs{display:inline-flex;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px;}
+  .lb-tab{background:none;border:none;color:var(--muted);font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;transition:background .12s,color .12s;}
+  .lb-tab.active{background:var(--accent);color:#fff;}
+  .lb-title{margin:12px 0 10px;font-size:15px;letter-spacing:.3px;text-align:center;}
+  .lb-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;min-height:16px;}
+  .lb-note{font-size:11px;color:var(--muted);}
   .lb-clear{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;padding:2px 4px;}
   .lb-clear:hover{color:var(--danger);}
   .lb-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
@@ -153,7 +169,7 @@
     border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;
     box-shadow:var(--shadow);
   }
-  body.playing .exit-btn{display:inline-flex;}
+  body.playing .exit-btn, body.counting .exit-btn{display:inline-flex;}
   .exit-btn:hover{filter:brightness(1.12);border-color:var(--danger);color:var(--danger);}
   .exit-btn:active{transform:scale(.96);}
 
@@ -199,13 +215,13 @@
   @media (max-width:640px){
     .controls .field:first-child{flex-basis:100%;}  /* name gets its own row */
 
-    body.playing header,
-    body.playing .panel,       /* controls + leaderboard panels */
-    body.playing .statbar,     /* Time / Next / Best HUD */
-    body.playing .actions,
-    body.playing footer{ display:none; }
+    body.playing header,  body.counting header,
+    body.playing .panel,  body.counting .panel,      /* controls + leaderboard */
+    body.playing .statbar,body.counting .statbar,    /* Time / Next / Best HUD */
+    body.playing .actions,body.counting .actions,
+    body.playing footer,  body.counting footer{ display:none; }
 
-    body.playing{ padding-top:8px; justify-content:center; }
+    body.playing, body.counting{ padding-top:8px; justify-content:center; }
   }
 </style>
 </head>
@@ -255,6 +271,9 @@
       <p>Tap <b>Start</b>, then click 1 → highest in order.</p>
       <button class="btn" id="startBtn">Start</button>
     </div>
+    <div class="overlay count-overlay hidden" id="countOverlay">
+      <div class="count-num" id="countNum">3</div>
+    </div>
     <div class="overlay hidden" id="doneOverlay">
       <h2>Done! 🎉</h2>
       <div class="big" id="doneTime">0.0s</div>
@@ -275,11 +294,18 @@
 
   <div class="panel lb-panel">
     <div class="lb-head">
-      <h3 id="lbTitle">Leaderboard</h3>
-      <button class="lb-clear" id="clearLb">Clear my scores</button>
+      <div class="lb-tabs">
+        <button class="lb-tab active" id="tabGlobal" type="button">🌍 Global</button>
+        <button class="lb-tab" id="tabDevice" type="button">📱 This device</button>
+      </div>
     </div>
+    <h3 id="lbTitle" class="lb-title">Leaderboard</h3>
     <ol class="lb-list" id="lbList"></ol>
     <p class="lb-empty" id="lbEmpty">No scores yet — finish a round to get on the board.</p>
+    <div class="lb-foot">
+      <span class="lb-note" id="lbNote"></span>
+      <button class="lb-clear" id="clearLb" type="button">Clear my scores</button>
+    </div>
   </div>
 
   <footer>
@@ -297,6 +323,8 @@
   const bestEl    = document.getElementById('best');
   const startOv   = document.getElementById('startOverlay');
   const doneOv    = document.getElementById('doneOverlay');
+  const countOv   = document.getElementById('countOverlay');
+  const countNum  = document.getElementById('countNum');
   const doneTime  = document.getElementById('doneTime');
   const doneMsg   = document.getElementById('doneMsg');
   const doneErr   = document.getElementById('doneErrors');
@@ -309,6 +337,9 @@
   const lbEmpty   = document.getElementById('lbEmpty');
   const lbTitle   = document.getElementById('lbTitle');
   const clearLb   = document.getElementById('clearLb');
+  const lbNote    = document.getElementById('lbNote');
+  const tabGlobal = document.getElementById('tabGlobal');
+  const tabDevice = document.getElementById('tabDevice');
 
   const SCORES_KEY = 'schulte_scores';
   const NAME_KEY   = 'schulte_name';
@@ -316,9 +347,17 @@
   const COLORS = ['#6c7bff','#3ddc97','#ff5d6c','#ffb454','#c77dff','#4ec9ff'];
   const GAME_URL = 'https://uniquews.github.io/schulte-table/';
 
+  // Cloud leaderboard (Supabase). The publishable key is safe to expose;
+  // the database's row-level security only allows reads and inserts.
+  const SUPA_URL = 'https://wymvmrxdxdctopttiwtm.supabase.co';
+  const SUPA_KEY = 'sb_publishable_fTJFwdeInuzA5BmF1tEfgw_V-Fzgu9A';
+
   let size = 5, total = 25, target = 1, errors = 0;
   let startTime = 0, timerId = null, playing = false;
   let lastResult = null;
+  let lbScope = 'global';  // 'global' | 'device'
+  let lbReqId = 0;         // guards against out-of-order async fetches
+  let countId = null;      // active countdown interval, if any
 
   function shuffle(a){
     for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
@@ -364,7 +403,7 @@
     arr.push(run);
     saveScores(arr);
   }
-  // Fastest run per player name for a given grid size, sorted fastest-first.
+  // Fastest run per player name for a given grid size, sorted fastest-first (local list).
   function topScores(runs, sz, limit){
     const best = {};
     for(const r of runs){
@@ -374,29 +413,84 @@
     }
     return Object.values(best).sort((a,b)=>a.secs-b.secs).slice(0, limit || 10);
   }
-  function renderLeaderboard(){
-    const sz = parseInt(sizeSel.value,10);
-    lbTitle.textContent = 'Leaderboard — '+sz+'×'+sz;
-    const rows = topScores(loadScores(), sz, 10);
-    const me = playerName().toLowerCase();
-    if(!rows.length){
-      lbList.innerHTML = '';
-      lbEmpty.style.display = 'block';
-      return;
+  // From rows already sorted fastest-first, keep the first (best) row per name.
+  function dedupSortedByName(rows, limit){
+    const seen = new Set(), out = [];
+    for(const r of rows){
+      const k = String(r.name).toLowerCase();
+      if(seen.has(k)) continue;
+      seen.add(k); out.push(r);
+      if(out.length >= (limit || 10)) break;
     }
+    return out;
+  }
+
+  // ---- Cloud (Supabase) ----
+  function supaHeaders(extra){
+    return Object.assign({ apikey:SUPA_KEY, Authorization:'Bearer '+SUPA_KEY }, extra || {});
+  }
+  async function submitScore(run){
+    try{
+      await fetch(SUPA_URL+'/rest/v1/scores', {
+        method:'POST',
+        headers: supaHeaders({ 'Content-Type':'application/json', Prefer:'return=minimal' }),
+        body: JSON.stringify({
+          name: run.name, size: run.size,
+          secs: Number(run.secs.toFixed(2)), score: run.score, errors: run.errors
+        })
+      });
+    }catch(_){ /* offline: the run is still saved locally */ }
+  }
+  async function fetchGlobal(sz){
+    const url = SUPA_URL+'/rest/v1/scores?select=name,secs,score&size=eq.'+sz+'&order=secs.asc&limit=200';
+    const res = await fetch(url, { headers: supaHeaders() });
+    if(!res.ok) throw new Error('fetch failed '+res.status);
+    return dedupSortedByName(await res.json(), 10);
+  }
+
+  function paintRows(rows, sz){
+    const me = playerName().toLowerCase();
+    if(!rows.length){ lbList.innerHTML=''; lbEmpty.style.display='block'; return; }
     lbEmpty.style.display = 'none';
     const medals = ['🥇','🥈','🥉'];
     lbList.innerHTML = rows.map((r,i)=>{
       const rank = medals[i] || (i+1);
-      const tier = tierFor(r.secs, sz*sz);
-      const isMe = r.name.toLowerCase() === me;
+      const secs = Number(r.secs);
+      const tier = tierFor(secs, sz*sz);
+      const isMe = String(r.name).toLowerCase() === me;
       return '<li class="lb-row'+(isMe?' me':'')+'">'
            +   '<span class="rk">'+rank+'</span>'
            +   '<span class="nm">'+esc(r.name)+'</span>'
-           +   '<span class="tm">'+r.secs.toFixed(1)+'s '+tier.emoji+'</span>'
+           +   '<span class="tm">'+secs.toFixed(1)+'s '+tier.emoji+'</span>'
            +   '<span class="sc">'+r.score+' pts</span>'
            + '</li>';
     }).join('');
+  }
+
+  async function renderLeaderboard(){
+    const sz = parseInt(sizeSel.value,10);
+    lbTitle.textContent = 'Leaderboard — '+sz+'×'+sz;
+    clearLb.style.display = (lbScope === 'device') ? '' : 'none';
+
+    if(lbScope === 'device'){
+      paintRows(topScores(loadScores(), sz, 10), sz);
+      lbNote.textContent = 'Saved on this device';
+      return;
+    }
+    // global
+    const reqId = ++lbReqId;
+    lbNote.textContent = 'Loading…';
+    lbList.innerHTML = ''; lbEmpty.style.display = 'none';
+    try{
+      const rows = await fetchGlobal(sz);
+      if(reqId !== lbReqId) return;               // a newer request superseded this one
+      paintRows(rows, sz);
+      lbNote.textContent = '🌍 Live global leaderboard';
+    }catch(_){
+      if(reqId !== lbReqId) return;
+      paintRows(topScores(loadScores(), sz, 10), sz);
+      lbNote.textContent = 'Offline — showing this device';
+    }
   }
 
   function buildBoard(){
@@ -404,6 +498,9 @@
     total = size*size;
     target = 1; errors = 0; playing = false;
     document.body.classList.remove('playing');
+    if(countId){ clearInterval(countId); countId = null; }
+    document.body.classList.remove('counting');
+    countOv.classList.add('hidden');
     stopTimer();
     timeEl.textContent = '0.0s';
     nextEl.textContent = '1';
@@ -427,6 +524,32 @@
     });
   }
 
+  // 3 · 2 · 1 · Go! — board stays hidden the whole time, then startGame() reveals it.
+  function beginCountdown(){
+    buildBoard();                       // fresh shuffled board (still hidden)
+    startOv.classList.add('hidden');
+    doneOv.classList.add('hidden');
+    document.body.classList.add('counting');
+    let n = 3;
+    countNum.textContent = n;
+    countOv.classList.remove('hidden');
+    restartCountAnim();
+    countId = setInterval(()=>{
+      n--;
+      if(n > 0){ countNum.textContent = n; restartCountAnim(); }
+      else if(n === 0){ countNum.textContent = 'Go!'; restartCountAnim(); }
+      else {
+        clearInterval(countId); countId = null;
+        document.body.classList.remove('counting');
+        countOv.classList.add('hidden');
+        startGame();
+      }
+    }, 800);
+  }
+  function restartCountAnim(){
+    countNum.classList.remove('count-pop'); void countNum.offsetWidth; countNum.classList.add('count-pop');
+  }
+
   function startGame(){
     startOv.classList.add('hidden');
     doneOv.classList.add('hidden');
@@ -448,8 +571,8 @@
 
   // Quit the current round without recording a score; back to the start screen.
   function exitGame(){
-    if(!playing) return;
-    buildBoard();                       // resets state + drops the 'playing' class
+    if(!playing && !countId) return;    // nothing to exit
+    buildBoard();                       // cancels countdown + drops 'playing'/'counting'
     startOv.classList.remove('hidden');
     doneOv.classList.add('hidden');
   }
@@ -487,8 +610,10 @@
     doneScore.innerHTML = 'Score <b>'+score+'</b>';
     lastResult = { size, secs, errors, score, tier };
 
-    recordScore({ name: playerName(), size, secs, score, errors, ts: Date.now() });
+    const run = { name: playerName(), size, secs, score, errors, ts: Date.now() };
+    recordScore(run);
     renderLeaderboard();
+    submitScore(run).then(()=>{ if(lbScope === 'global') renderLeaderboard(); });
 
     const prev = loadBest();
     if(prev === null || secs < prev){
@@ -524,9 +649,9 @@
   }
 
   // Events
-  document.getElementById('startBtn').addEventListener('click', startGame);
-  document.getElementById('againBtn').addEventListener('click', ()=>{ buildBoard(); startGame(); });
-  document.getElementById('restartBtn').addEventListener('click', ()=>{ buildBoard(); startGame(); });
+  document.getElementById('startBtn').addEventListener('click', beginCountdown);
+  document.getElementById('againBtn').addEventListener('click', beginCountdown);
+  document.getElementById('restartBtn').addEventListener('click', beginCountdown);
   document.getElementById('shuffleBtn').addEventListener('click', ()=>{ buildBoard(); startOv.classList.remove('hidden'); doneOv.classList.add('hidden'); });
   sizeSel.addEventListener('change', ()=>{ buildBoard(); startOv.classList.remove('hidden'); renderLeaderboard(); });
   nameInput.addEventListener('input', ()=>{ localStorage.setItem(NAME_KEY, nameInput.value); renderLeaderboard(); });
@@ -543,6 +668,14 @@
   shareBtn.addEventListener('click', shareResult);
   document.getElementById('exitBtn').addEventListener('click', exitGame);
   document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') exitGame(); });
+  function setScope(scope){
+    lbScope = scope;
+    tabGlobal.classList.toggle('active', scope === 'global');
+    tabDevice.classList.toggle('active', scope === 'device');
+    renderLeaderboard();
+  }
+  tabGlobal.addEventListener('click', ()=>setScope('global'));
+  tabDevice.addEventListener('click', ()=>setScope('device'));
 
   // ---- Subtle Matrix digital rain ----
   (function initRain(){

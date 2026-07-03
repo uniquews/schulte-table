@@ -92,5 +92,27 @@ expect('sorted fastest first', board[0].name, 'Bob');
 expect('keeps player best run', board[1].secs, 18.5);   // Alice's 18.5, not 22.0
 expect('slowest player last', board[2].name, 'carol');
 
+// ---- global dedup: from a secs-sorted cloud list, keep best row per name ----
+function dedupSortedByName(rows, limit){
+  const seen=new Set(), out=[];
+  for(const r of rows){
+    const k=String(r.name).toLowerCase();
+    if(seen.has(k)) continue;
+    seen.add(k); out.push(r);
+    if(out.length>=(limit||10)) break;
+  }
+  return out;
+}
+console.log('\n--- global dedup ---');
+const cloud = [ // already ordered by secs asc, as Supabase returns it
+  {name:'Bob',   secs:15.0}, {name:'Alice', secs:18.5},
+  {name:'alice', secs:19.9}, {name:'Bob',   secs:21.0}, {name:'Carol', secs:40.0},
+];
+const g = dedupSortedByName(cloud, 10);
+expect('one entry per name', g.length, 3);
+expect('keeps each name\'s fastest', g[1].secs, 18.5);  // Alice 18.5, not the 19.9 dup
+expect('case-insensitive dedup', g.some(r=>r.name==='alice'), false);
+expect('limit is respected', dedupSortedByName(cloud, 2).length, 2);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
