@@ -346,6 +346,7 @@
 
   const COLORS = ['#6c7bff','#3ddc97','#ff5d6c','#ffb454','#c77dff','#4ec9ff'];
   const GAME_URL = 'https://uniquews.github.io/schulte-table/';
+  const COLOR_FACTOR = 1.2; // color-distraction mode: ~20% more time allowed per number at each tier
 
   // Cloud leaderboard (Supabase). The publishable key is safe to expose;
   // the database's row-level security only allows reads and inserts.
@@ -371,9 +372,9 @@
   }
   function fmt(ms){ return (ms/1000).toFixed(1)+'s'; }
 
-  // Rank the result by time-per-cell so it scales fairly across grid sizes.
-  function tierFor(secs, cells){
-    const spc = secs/cells; // seconds per number
+  // Rank by time-per-cell so it scales across grid sizes; color mode is judged on its own (easier) scale.
+  function tierFor(secs, cells, color){
+    const spc = (secs/cells) / (color ? COLOR_FACTOR : 1); // difficulty-adjusted seconds per number
     if(spc < 0.45) return {name:'The One',   emoji:'🕶️', cls:'t-one'};
     if(spc < 0.60) return {name:'Excellent', emoji:'🥇', cls:'t-exc'};
     if(spc < 0.80) return {name:'Good',      emoji:'🥈', cls:'t-good'};
@@ -403,11 +404,11 @@
     arr.push(run);
     saveScores(arr);
   }
-  // Fastest run per player name for a given grid size, sorted fastest-first (local list).
-  function topScores(runs, sz, limit){
+  // Fastest run per player name for a given grid size + mode, sorted fastest-first (local list).
+  function topScores(runs, sz, color, limit){
     const best = {};
     for(const r of runs){
-      if(r.size !== sz) continue;
+      if(r.size !== sz || !!r.color !== color) continue;
       const k = r.name.toLowerCase();
       if(!best[k] || r.secs < best[k].secs) best[k] = r;
     }
@@ -435,20 +436,20 @@
         method:'POST',
         headers: supaHeaders({ 'Content-Type':'application/json', Prefer:'return=minimal' }),
         body: JSON.stringify({
-          name: run.name, size: run.size,
+          name: run.name, size: run.size, color: !!run.color,
           secs: Number(run.secs.toFixed(2)), score: run.score, errors: run.errors
         })
       });
     }catch(_){ /* offline: the run is still saved locally */ }
   }
-  async function fetchGlobal(sz){
-    const url = SUPA_URL+'/rest/v1/scores?select=name,secs,score&size=eq.'+sz+'&order=secs.asc&limit=200';
+  async function fetchGlobal(sz, color){
+    const url = SUPA_URL+'/rest/v1/scores?select=name,secs,score&size=eq.'+sz+'&color=eq.'+color+'&order=secs.asc&limit=200';
     const res = await fetch(url, { headers: supaHeaders() });
     if(!res.ok) throw new Error('fetch failed '+res.status);
     return dedupSortedByName(await res.json(), 10);
   }
 
-  function paintRows(rows, sz){
+  function paintRows(rows, sz, color){
     const me = playerName().toLowerCase();
     if(!rows.length){ lbList.innerHTML=''; lbEmpty.style.display='block'; return; }
     lbEmpty.style.display = 'none';
@@ -456,7 +457,7 @@
     lbList.innerHTML = rows.map((r,i)=>{
       const rank = medals[i] || (i+1);
       const secs = Number(r.secs);
-      const tier = tierFor(secs, sz*sz);
+      const tier = tierFor(secs, sz*sz, color);
       const isMe = String(r.name).toLowerCase() === me;
       return '<li class="lb-row'+(isMe?' me':'')+'">'
            +   '<span class="rk">'+rank+'</span>'
@@ -469,11 +470,12 @@
 
   async function renderLeaderboard(){
     const sz = parseInt(sizeSel.value,10);
-    lbTitle.textContent = 'Leaderboard — '+sz+'×'+sz;
+    const color = colorChk.checked;               // leaderboard reflects the current mode
+    lbTitle.textContent = 'Leaderboard — '+sz+'×'+sz+(color ? ' · Color' : '');
     clearLb.style.display = (lbScope === 'device') ? '' : 'none';
 
     if(lbScope === 'device'){
-      paintRows(topScores(loadScores(), sz, 10), sz);
+      paintRows(topScores(loadScores(), sz, color, 10), sz, color);
       lbNote.textContent = 'Saved on this device';
       return;
     }
@@ -482,13 +484,13 @@
     lbNote.textContent = 'Loading…';
     lbList.innerHTML = ''; lbEmpty.style.display = 'none';
     try{
-      const rows = await fetchGlobal(sz);
+      const rows = await fetchGlobal(sz, color);
       if(reqId !== lbReqId) return;               // a newer request superseded this one
-      paintRows(rows, sz);
+      paintRows(rows, sz, color);
       lbNote.textContent = '🌍 Live global leaderboard';
     }catch(_){
       if(reqId !== lbReqId) return;
-      paintRows(topScores(loadScores(), sz, 10), sz);
+      paintRows(topScores(loadScores(), sz, color, 10), sz, color);
       lbNote.textContent = 'Offline — showing this device';
     }
   }
@@ -602,15 +604,16 @@
     doneErr.textContent = errors ? (errors+' misclick'+(errors>1?'s':'')) : 'Flawless — no misclicks!';
 
     const secs = elapsed/1000;
-    const tier = tierFor(secs, total);
+    const color = colorChk.checked;
+    const tier = tierFor(secs, total, color);
     const score = scoreFor(secs, errors, total);
 
     doneRank.className = 'rank ' + tier.cls;
     doneRank.innerHTML = '<span class="emoji">'+tier.emoji+'</span>Level: '+tier.name;
     doneScore.innerHTML = 'Score <b>'+score+'</b>';
-    lastResult = { size, secs, errors, score, tier };
+    lastResult = { size, secs, errors, score, tier, color };
 
-    const run = { name: playerName(), size, secs, score, errors, ts: Date.now() };
+    const run = { name: playerName(), size, secs, score, errors, color, ts: Date.now() };
     recordScore(run);
     renderLeaderboard();
     submitScore(run).then(()=>{ if(lbScope === 'global') renderLeaderboard(); });
@@ -631,7 +634,7 @@
     if(!lastResult) return '';
     const r = lastResult;
     const errTxt = r.errors ? ' ('+r.errors+' misclick'+(r.errors>1?'s':'')+')' : ' — flawless';
-    return 'Schulte Table '+r.size+'×'+r.size+'\n'
+    return 'Schulte Table '+r.size+'×'+r.size+(r.color ? ' · Color' : '')+'\n'
          + '⏱ '+r.secs.toFixed(1)+'s — '+r.tier.emoji+' '+r.tier.name+'\n'
          + '🎯 Score '+r.score+errTxt+'\n'
          + GAME_URL;
@@ -664,7 +667,7 @@
       loadBest();
     }
   });
-  colorChk.addEventListener('change', ()=>{ buildBoard(); startOv.classList.remove('hidden'); });
+  colorChk.addEventListener('change', ()=>{ buildBoard(); startOv.classList.remove('hidden'); renderLeaderboard(); });
   shareBtn.addEventListener('click', shareResult);
   document.getElementById('exitBtn').addEventListener('click', exitGame);
   document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') exitGame(); });

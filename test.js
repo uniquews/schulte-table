@@ -39,8 +39,9 @@ console.log('best: 12.3->10.1 =', bestUpdate(12.3,10.1), '(exp 10.1)');
 console.log('best: 10.1->15.0 =', bestUpdate(10.1,15.0), '(exp 10.1)');
 
 // ---- tier + score logic (mirrors index.html) ----
-function tierFor(secs, cells){
-  const spc = secs/cells;
+const COLOR_FACTOR = 1.2;
+function tierFor(secs, cells, color){
+  const spc = (secs/cells) / (color ? COLOR_FACTOR : 1);
   if(spc < 0.45) return 'The One';
   if(spc < 0.60) return 'Excellent';
   if(spc < 0.80) return 'Good';
@@ -62,17 +63,20 @@ expect('5x5 in 14s', tierFor(14, 25), 'Excellent');    // 0.56 s/cell
 expect('5x5 in 19s', tierFor(19, 25), 'Good');         // 0.76 s/cell
 expect('5x5 in 26s', tierFor(26, 25), 'Average');      // 1.04 s/cell
 expect('5x5 in 40s', tierFor(40, 25), 'Beginner');     // 1.6 s/cell
+// color mode is judged on an easier scale (same time -> equal or better tier)
+expect('5x5 15.5s normal', tierFor(15.5, 25, false), 'Good');       // 0.62 s/cell
+expect('5x5 15.5s color',  tierFor(15.5, 25, true),  'Excellent');  // 0.62/1.2 = 0.517 -> up a tier
 
 console.log('\n--- score ---');
 expect('faster beats slower', scoreFor(20,0,25) > scoreFor(30,0,25), true);
 expect('misclicks lower score', scoreFor(20,3,25) < scoreFor(20,0,25), true);
 expect('score is non-negative', scoreFor(999,50,25) >= 0, true);
 
-// ---- leaderboard: fastest run per player for a size (mirrors index.html) ----
-function topScores(runs, sz, limit){
+// ---- leaderboard: fastest run per player for a size + mode (mirrors index.html) ----
+function topScores(runs, sz, color, limit){
   const best={};
   for(const r of runs){
-    if(r.size!==sz) continue;
+    if(r.size!==sz || !!r.color!==color) continue;
     const k=r.name.toLowerCase();
     if(!best[k] || r.secs<best[k].secs) best[k]=r;
   }
@@ -86,11 +90,22 @@ const runs = [
   {name:'Bob',   size:9, secs:30.0, score:2700},   // different size -> excluded from 5x5
   {name:'carol', size:5, secs:40.0, score:600},
 ];
-const board = topScores(runs, 5, 10);
+const board = topScores(runs, 5, false, 10);
 expect('only 5x5 players listed', board.length, 3);
 expect('sorted fastest first', board[0].name, 'Bob');
 expect('keeps player best run', board[1].secs, 18.5);   // Alice's 18.5, not 22.0
 expect('slowest player last', board[2].name, 'carol');
+
+// mode is its own category: color and normal runs never mix
+const modeRuns = [
+  {name:'A', size:5, secs:20, color:false},
+  {name:'B', size:5, secs:18, color:true},
+  {name:'C', size:5, secs:25, color:true},
+];
+expect('normal board excludes color runs', topScores(modeRuns,5,false,10).length, 1);
+expect('normal board is A', topScores(modeRuns,5,false,10)[0].name, 'A');
+expect('color board excludes normal runs', topScores(modeRuns,5,true,10).length, 2);
+expect('color board fastest is B', topScores(modeRuns,5,true,10)[0].name, 'B');
 
 // ---- global dedup: from a secs-sorted cloud list, keep best row per name ----
 function dedupSortedByName(rows, limit){
