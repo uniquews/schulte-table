@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0f1220" />
+<title>Stroop Test — Brain Trainer</title>
+<style>
+  :root{
+    --bg:#0f1220; --bg-2:#171a2b; --panel:#1c2036; --panel-2:#232847;
+    --text:#e8ebf7; --muted:#9aa2c4; --accent:#6c7bff; --accent-2:#3ddc97;
+    --danger:#ff5d6c; --border:#2c3358; --shadow:0 10px 30px rgba(0,0,0,.35); --radius:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #1a1f38 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;min-height:100%;padding:12px 16px;
+  }
+  header{width:100%;max-width:720px;text-align:center;margin-bottom:10px;}
+  h1{
+    font-size:24px;margin:0 0 3px;letter-spacing:.4px;font-weight:800;
+    background:linear-gradient(90deg,#ffcc4d,#4ea1ff 50%,#e5484d);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .subtitle{color:var(--muted);font-size:13px;margin:0;}
+
+  .tabs{display:inline-flex;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:4px;margin-bottom:12px;box-shadow:var(--shadow);}
+  .tab{text-decoration:none;color:var(--muted);font-weight:700;font-size:14px;padding:8px 18px;border-radius:9px;transition:background .12s,color .12s;}
+  .tab.active{background:var(--accent);color:#fff;}
+  .tab:not(.active):hover{color:var(--text);}
+
+  .panel{
+    width:100%;max-width:720px;background:linear-gradient(180deg,var(--panel),var(--bg-2));
+    border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px;margin-bottom:10px;
+  }
+  .field{display:flex;flex-direction:column;gap:6px;}
+  .field label{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .field input[type="text"]{
+    appearance:none;background:var(--panel-2);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:10px 12px;font-size:15px;font-weight:600;width:100%;
+  }
+  .field input[type="text"]::placeholder{color:var(--muted);font-weight:500;}
+  .field input[type="text"]:focus{outline:none;border-color:var(--accent);}
+
+  .statbar{display:flex;gap:10px;width:100%;max-width:720px;margin-bottom:10px;}
+  .stat{flex:1;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center;}
+  .stat .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
+  .stat .v{font-size:24px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;}
+  .stat .v.accent{color:var(--accent-2);}
+
+  .boardwrap{position:relative;width:100%;max-width:520px;margin:0 auto 8px;}
+
+  .stroop-area{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;
+    width:100%;min-height:340px;padding:20px;visibility:hidden;
+  }
+  body.playing .stroop-area{visibility:visible;}
+  .stroop-word{font-size:clamp(48px,14vw,84px);font-weight:800;letter-spacing:2px;line-height:1;}
+  .stroop-word.good{animation:countPop .4s ease;}
+  .stroop-btns{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;width:100%;max-width:360px;}
+  .stroop-btn{
+    border:none;border-radius:12px;padding:18px;font-size:16px;font-weight:800;color:#0a1018;
+    cursor:pointer;box-shadow:var(--shadow);transition:transform .06s,filter .12s;letter-spacing:.5px;
+  }
+  .stroop-btn:hover{filter:brightness(1.08);}
+  .stroop-btn:active{transform:scale(.96);}
+  .stroop-btn.wrong{animation:shake .3s;}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+
+  .overlay{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(15,18,32,.86);backdrop-filter:blur(3px);border-radius:var(--radius);text-align:center;padding:20px;z-index:10;
+  }
+  .overlay h2{margin:0 0 6px;font-size:26px;}
+  .overlay p{margin:2px 0;color:var(--muted);font-size:14px;}
+  .overlay .big{font-size:40px;font-weight:800;color:var(--accent-2);margin:8px 0;font-variant-numeric:tabular-nums;}
+  .hidden{display:none!important;}
+  .count-overlay{background:var(--bg-2);backdrop-filter:none;}
+  .count-num{font-size:clamp(64px,22vw,112px);font-weight:800;color:var(--accent-2);font-variant-numeric:tabular-nums;line-height:1;text-shadow:0 0 30px rgba(61,220,151,.4);}
+  @keyframes countPop{0%{opacity:0;transform:scale(.4)}30%{opacity:1;transform:scale(1.06)}55%{transform:scale(1)}100%{opacity:.9;transform:scale(1)}}
+  .count-pop{animation:countPop .8s ease;}
+
+  .btn{
+    background:linear-gradient(180deg,var(--accent),#5765e6);color:#fff;border:none;border-radius:12px;
+    padding:14px 26px;font-size:16px;font-weight:800;cursor:pointer;margin-top:14px;box-shadow:var(--shadow);
+    transition:transform .06s, filter .12s;
+  }
+  .btn:hover{filter:brightness(1.08);}
+  .btn:active{transform:scale(.97);}
+  .btn.ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--border);box-shadow:none;}
+  .overlay .btn.ghost{margin-top:8px;padding:11px 22px;font-size:14px;}
+
+  .rank{display:inline-block;font-size:18px;font-weight:800;letter-spacing:.3px;margin:8px 0 0;padding:6px 16px;border-radius:999px;border:1px solid currentColor;background:rgba(255,255,255,.05);}
+  .rank .emoji{margin-right:7px;}
+  .score-line{color:var(--muted);font-size:14px;margin:2px 0 0;}
+  .score-line b{color:var(--text);font-variant-numeric:tabular-nums;font-size:16px;}
+  .t-one{color:#3ddc97;text-shadow:0 0 14px rgba(61,220,151,.6);}
+  .t-exc{color:#6cff9e;} .t-good{color:#8fd6ff;} .t-avg{color:#ffb454;} .t-beg{color:#9aa2c4;}
+  .copied{font-size:12px;color:var(--accent-2);height:15px;margin-top:8px;}
+
+  .actions{display:flex;gap:10px;justify-content:center;width:100%;max-width:520px;margin:0 auto;}
+  .actions .btn{margin-top:0;flex:1;padding:12px 16px;font-size:15px;}
+
+  /* Leaderboard */
+  .lb-panel{max-width:520px;margin:12px auto 0;}
+  .lb-head{display:flex;align-items:center;justify-content:center;}
+  .lb-tabs{display:inline-flex;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px;}
+  .lb-tab{background:none;border:none;color:var(--muted);font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;transition:background .12s,color .12s;}
+  .lb-tab.active{background:var(--accent);color:#fff;}
+  .lb-title{margin:12px 0 10px;font-size:15px;letter-spacing:.3px;text-align:center;}
+  .lb-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
+  .lb-row{display:grid;grid-template-columns:34px 1fr auto auto;gap:10px;align-items:center;
+    background:linear-gradient(180deg,var(--panel-2),#1e2440);border:1px solid var(--border);
+    border-left:3px solid transparent;border-radius:10px;padding:9px 12px;font-size:14px;transition:transform .1s;}
+  .lb-row:hover{transform:translateX(2px);}
+  .lb-list .lb-row:nth-child(1){border-left-color:#e9c46a;}
+  .lb-list .lb-row:nth-child(2){border-left-color:#c7cbe0;}
+  .lb-list .lb-row:nth-child(3){border-left-color:#cd8b5b;}
+  .lb-row .rk{font-weight:800;text-align:center;font-variant-numeric:tabular-nums;}
+  .lb-row .nm{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .lb-row .tm{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap;}
+  .lb-row .sc{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .lb-row.me{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .lb-empty{color:var(--muted);font-size:13px;text-align:center;margin:8px 0 2px;}
+  .lb-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;min-height:16px;}
+  .lb-note{font-size:11px;color:var(--muted);}
+  .lb-clear{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;padding:2px 4px;}
+  .lb-clear:hover{color:var(--danger);}
+
+  footer{color:var(--muted);font-size:12px;margin-top:10px;text-align:center;max-width:560px;line-height:1.45;}
+
+  .rain{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.12;}
+  body>*:not(.rain):not(.exit-btn){position:relative;z-index:1;}
+  .exit-btn{
+    position:fixed;top:12px;right:12px;z-index:30;display:none;align-items:center;gap:6px;
+    background:var(--panel-2);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--shadow);
+  }
+  body.playing .exit-btn, body.counting .exit-btn{display:inline-flex;}
+  .exit-btn:hover{filter:brightness(1.12);border-color:var(--danger);color:var(--danger);}
+  .exit-btn:active{transform:scale(.96);}
+
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes pop{from{opacity:0;transform:scale(.96) translateY(6px)}to{opacity:1;transform:none}}
+  body{animation:fadeIn .4s ease;}
+  .overlay:not(.hidden){animation:pop .3s cubic-bezier(.2,.8,.25,1);}
+  .btn:focus-visible, .field input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  @media (prefers-reduced-motion:reduce){ *{animation:none !important;transition:none !important;} .rain{display:none;} }
+
+  @media (max-width:640px){
+    body.playing header, body.counting header,
+    body.playing .panel, body.counting .panel,
+    body.playing .actions, body.counting .actions,
+    body.playing footer, body.counting footer{ display:none; }
+    body.playing, body.counting{ padding-top:8px; justify-content:center; }
+  }
+</style>
+</head>
+<body>
+  <canvas class="rain" id="rain" aria-hidden="true"></canvas>
+  <button class="exit-btn" id="exitBtn" type="button" aria-label="Exit game">✕ Exit</button>
+  <nav class="tabs">
+    <a href="index.html" class="tab">🔢 Schulte</a>
+    <a href="stroop.html" class="tab active">🎨 Stroop</a>
+  </nav>
+  <header>
+    <h1>Stroop Test</h1>
+    <p class="subtitle">Tap the button matching the <b>ink colour</b> of the word — not what it says.</p>
+  </header>
+
+  <div class="panel">
+    <div class="field">
+      <label for="playerName">Your name</label>
+      <input id="playerName" type="text" maxlength="14" placeholder="Enter nickname" autocomplete="off" spellcheck="false" />
+    </div>
+  </div>
+
+  <div class="statbar">
+    <div class="stat"><div class="k">Time</div><div class="v" id="time">0.0s</div></div>
+    <div class="stat"><div class="k">Trial</div><div class="v accent" id="trial">1 / 20</div></div>
+    <div class="stat"><div class="k">Best</div><div class="v" id="best">—</div></div>
+  </div>
+
+  <div class="boardwrap">
+    <div class="stroop-area" id="stroopArea">
+      <div class="stroop-word" id="stroopWord">READY</div>
+      <div class="stroop-btns" id="stroopBtns"></div>
+    </div>
+    <div class="overlay" id="startOverlay">
+      <h2>Ready?</h2>
+      <p id="startHint">Tap <b>Start</b>, then tap the button matching the <b>ink colour</b> — not the word.</p>
+      <button class="btn" id="startBtn">Start</button>
+    </div>
+    <div class="overlay count-overlay hidden" id="countOverlay">
+      <div class="count-num" id="countNum">3</div>
+    </div>
+    <div class="overlay hidden" id="doneOverlay">
+      <h2>Done! 🎉</h2>
+      <div class="big" id="doneTime">0.0s</div>
+      <div class="rank" id="doneRank"></div>
+      <div class="score-line" id="doneScore"></div>
+      <p id="doneMsg">Nice work.</p>
+      <p id="doneErrors"></p>
+      <button class="btn" id="againBtn">Play again</button>
+      <button class="btn ghost" id="shareBtn">Share result</button>
+      <div class="copied" id="copied"></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn ghost" id="restartBtn">Restart</button>
+  </div>
+
+  <div class="panel lb-panel">
+    <div class="lb-head">
+      <div class="lb-tabs">
+        <button class="lb-tab active" id="tabGlobal" type="button">🌍 Global</button>
+        <button class="lb-tab" id="tabDevice" type="button">📱 This device</button>
+      </div>
+    </div>
+    <h3 id="lbTitle" class="lb-title">Stroop Leaderboard</h3>
+    <ol class="lb-list" id="lbList"></ol>
+    <p class="lb-empty" id="lbEmpty">No scores yet — finish a round to get on the board.</p>
+    <div class="lb-foot">
+      <span class="lb-note" id="lbNote"></span>
+      <button class="lb-clear" id="clearLb" type="button">Clear my scores</button>
+    </div>
+  </div>
+
+  <footer>
+    The Stroop effect: naming the ink colour of a mismatched colour word is slower —
+    a classic test of attention and processing speed. Best times are saved on this device.
+  </footer>
+
+<script>
+(function(){
+  const timeEl    = document.getElementById('time');
+  const trialEl   = document.getElementById('trial');
+  const bestEl    = document.getElementById('best');
+  const startOv   = document.getElementById('startOverlay');
+  const doneOv    = document.getElementById('doneOverlay');
+  const countOv   = document.getElementById('countOverlay');
+  const countNum  = document.getElementById('countNum');
+  const doneTime  = document.getElementById('doneTime');
+  const doneRank  = document.getElementById('doneRank');
+  const doneScore = document.getElementById('doneScore');
+  const doneMsg   = document.getElementById('doneMsg');
+  const doneErr   = document.getElementById('doneErrors');
+  const shareBtn  = document.getElementById('shareBtn');
+  const copiedEl  = document.getElementById('copied');
+  const startHint = document.getElementById('startHint');
+  const nameInput = document.getElementById('playerName');
+  const stroopWord= document.getElementById('stroopWord');
+  const stroopBtns= document.getElementById('stroopBtns');
+  const lbList    = document.getElementById('lbList');
+  const lbEmpty   = document.getElementById('lbEmpty');
+  const lbTitle   = document.getElementById('lbTitle');
+  const lbNote    = document.getElementById('lbNote');
+  const clearLb   = document.getElementById('clearLb');
+  const tabGlobal = document.getElementById('tabGlobal');
+  const tabDevice = document.getElementById('tabDevice');
+
+  const GAME_URL   = 'https://uniquews.github.io/schulte-table/stroop.html';
+  const NAME_KEY   = 'schulte_name';       // shared nickname across both games
+  const SCORES_KEY = 'stroop_scores';
+  const SUPA_URL   = 'https://wymvmrxdxdctopttiwtm.supabase.co';
+  const SUPA_KEY   = 'sb_publishable_fTJFwdeInuzA5BmF1tEfgw_V-Fzgu9A';
+
+  const TRIALS = 20;
+  const COLORS = [
+    { name:'RED',    hex:'#e5484d' },
+    { name:'GREEN',  hex:'#3ddc97' },
+    { name:'BLUE',   hex:'#4ea1ff' },
+    { name:'YELLOW', hex:'#ffcc4d' },
+  ];
+
+  let target = 1, total = TRIALS, errors = 0;
+  let startTime = 0, timerId = null, countId = null, playing = false;
+  let ink = '', lastResult = null;
+  let lbScope = 'global', lbReqId = 0;
+
+  function fmt(ms){ return (ms/1000).toFixed(1)+'s'; }
+  function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function playerName(){ const n=(nameInput.value||'').trim(); return n||'Player'; }
+
+  // Time-per-trial tier (mirrors the Schulte scale, cells = trials).
+  function tierFor(secs){
+    const spc = secs/TRIALS;
+    if(spc < 0.45) return {name:'The One',   emoji:'🕶️', cls:'t-one'};
+    if(spc < 0.60) return {name:'Excellent', emoji:'🥇', cls:'t-exc'};
+    if(spc < 0.80) return {name:'Good',      emoji:'🥈', cls:'t-good'};
+    if(spc < 1.10) return {name:'Average',   emoji:'🥉', cls:'t-avg'};
+    return {name:'Beginner', emoji:'🌱', cls:'t-beg'};
+  }
+  function scoreFor(secs, mis){ return Math.max(0, Math.round(TRIALS*1000/(secs + mis*2))); }
+
+  // ---- local + cloud leaderboard ----
+  function loadScores(){ try{ return JSON.parse(localStorage.getItem(SCORES_KEY)) || []; }catch(_){ return []; } }
+  function saveScores(a){ localStorage.setItem(SCORES_KEY, JSON.stringify(a)); }
+  function recordScore(run){ const a=loadScores(); a.push(run); saveScores(a); }
+  function dedupSortedByName(rows, limit){
+    const seen=new Set(), out=[];
+    for(const r of rows){ const k=String(r.name).toLowerCase(); if(seen.has(k)) continue; seen.add(k); out.push(r); if(out.length>=(limit||10)) break; }
+    return out;
+  }
+  function topLocal(runs, limit){
+    const best={};
+    for(const r of runs){ const k=r.name.toLowerCase(); if(!best[k]||r.secs<best[k].secs) best[k]=r; }
+    return Object.values(best).sort((a,b)=>a.secs-b.secs).slice(0, limit||10);
+  }
+  function supaHeaders(extra){ return Object.assign({ apikey:SUPA_KEY, Authorization:'Bearer '+SUPA_KEY }, extra||{}); }
+  async function submitScore(run){
+    try{
+      await fetch(SUPA_URL+'/rest/v1/stroop_scores', {
+        method:'POST',
+        headers: supaHeaders({ 'Content-Type':'application/json', Prefer:'return=minimal' }),
+        body: JSON.stringify({ name:run.name, trials:TRIALS, secs:Number(run.secs.toFixed(2)), score:run.score, errors:run.errors })
+      });
+    }catch(_){ /* offline: still saved locally */ }
+  }
+  async function fetchGlobal(){
+    const url = SUPA_URL+'/rest/v1/stroop_scores?select=name,secs,score&trials=eq.'+TRIALS+'&order=secs.asc&limit=200';
+    const res = await fetch(url, { headers: supaHeaders() });
+    if(!res.ok) throw new Error('fetch failed '+res.status);
+    return dedupSortedByName(await res.json(), 10);
+  }
+  function paintRows(rows){
+    const me = playerName().toLowerCase();
+    if(!rows.length){ lbList.innerHTML=''; lbEmpty.style.display='block'; return; }
+    lbEmpty.style.display='none';
+    const medals=['🥇','🥈','🥉'];
+    lbList.innerHTML = rows.map((r,i)=>{
+      const rank = medals[i] || (i+1);
+      const secs = Number(r.secs);
+      const tier = tierFor(secs);
+      const isMe = String(r.name).toLowerCase() === me;
+      return '<li class="lb-row'+(isMe?' me':'')+'">'
+           +   '<span class="rk">'+rank+'</span>'
+           +   '<span class="nm">'+esc(r.name)+'</span>'
+           +   '<span class="tm">'+secs.toFixed(1)+'s '+tier.emoji+'</span>'
+           +   '<span class="sc">'+r.score+' pts</span>'
+           + '</li>';
+    }).join('');
+  }
+  async function renderLeaderboard(){
+    clearLb.style.display = (lbScope==='device') ? '' : 'none';
+    if(lbScope==='device'){
+      paintRows(topLocal(loadScores(), 10));
+      lbNote.textContent = 'Saved on this device';
+      return;
+    }
+    const reqId = ++lbReqId;
+    lbNote.textContent = 'Loading…';
+    lbList.innerHTML=''; lbEmpty.style.display='none';
+    try{
+      const rows = await fetchGlobal();
+      if(reqId!==lbReqId) return;
+      paintRows(rows);
+      lbNote.textContent = '🌍 Live global leaderboard';
+    }catch(_){
+      if(reqId!==lbReqId) return;
+      paintRows(topLocal(loadScores(), 10));
+      lbNote.textContent = 'Offline — showing this device';
+    }
+  }
+
+  // ---- best time ----
+  function loadBest(){
+    const v = localStorage.getItem('stroop_best');
+    bestEl.textContent = v ? (parseFloat(v).toFixed(1)+'s') : '—';
+    return v ? parseFloat(v) : null;
+  }
+
+  // ---- gameplay ----
+  function renderButtons(){
+    stroopBtns.innerHTML = '';
+    COLORS.forEach(col=>{
+      const b = document.createElement('button');
+      b.className = 'stroop-btn'; b.type = 'button';
+      b.textContent = col.name; b.style.background = col.hex;
+      b.addEventListener('click', ()=>onStroop(col.name, b));
+      stroopBtns.appendChild(b);
+    });
+  }
+  function renderTrial(){
+    const inkC  = COLORS[Math.floor(Math.random()*COLORS.length)];
+    const wordC = COLORS[Math.floor(Math.random()*COLORS.length)];
+    ink = inkC.name;
+    stroopWord.textContent = wordC.name;
+    stroopWord.style.color = inkC.hex;
+    trialEl.textContent = target+' / '+total;
+  }
+  function buildRound(){
+    target = 1; errors = 0; playing = false;
+    document.body.classList.remove('playing');
+    if(countId){ clearInterval(countId); countId = null; }
+    document.body.classList.remove('counting');
+    countOv.classList.add('hidden');
+    stopTimer();
+    timeEl.textContent = '0.0s';
+    renderButtons();
+    renderTrial();
+    loadBest();
+  }
+
+  function beginCountdown(){
+    buildRound();
+    startOv.classList.add('hidden');
+    doneOv.classList.add('hidden');
+    document.body.classList.add('counting');
+    let n = 3;
+    countNum.textContent = n;
+    countOv.classList.remove('hidden');
+    restartCountAnim();
+    countId = setInterval(()=>{
+      n--;
+      if(n>0){ countNum.textContent = n; restartCountAnim(); }
+      else if(n===0){ countNum.textContent = 'Go!'; restartCountAnim(); }
+      else { clearInterval(countId); countId=null; document.body.classList.remove('counting'); countOv.classList.add('hidden'); startGame(); }
+    }, 800);
+  }
+  function restartCountAnim(){ countNum.classList.remove('count-pop'); void countNum.offsetWidth; countNum.classList.add('count-pop'); }
+
+  function startGame(){
+    startOv.classList.add('hidden');
+    doneOv.classList.add('hidden');
+    playing = true;
+    document.body.classList.add('playing');
+    target = 1; errors = 0;
+    renderTrial();
+    startTime = performance.now();
+    startTimer();
+  }
+  function startTimer(){ stopTimer(); timerId = setInterval(()=>{ timeEl.textContent = fmt(performance.now()-startTime); }, 100); }
+  function stopTimer(){ if(timerId){ clearInterval(timerId); timerId=null; } }
+
+  function onStroop(name, btn){
+    if(!playing) return;
+    if(name === ink){
+      target++;
+      if(target > total){ finish(); }
+      else {
+        renderTrial();
+        stroopWord.classList.remove('good'); void stroopWord.offsetWidth; stroopWord.classList.add('good');
+      }
+    } else {
+      errors++;
+      btn.classList.remove('wrong'); void btn.offsetWidth; btn.classList.add('wrong');
+      setTimeout(()=>btn.classList.remove('wrong'), 320);
+    }
+  }
+
+  function finish(){
+    playing = false;
+    document.body.classList.remove('playing');
+    stopTimer();
+    const elapsed = performance.now()-startTime;
+    timeEl.textContent = fmt(elapsed);
+    doneTime.textContent = fmt(elapsed);
+    doneErr.textContent = errors ? (errors+' miss'+(errors>1?'es':'')) : 'Flawless — no misses!';
+
+    const secs = elapsed/1000;
+    const tier = tierFor(secs);
+    const score = scoreFor(secs, errors);
+    doneRank.className = 'rank ' + tier.cls;
+    doneRank.innerHTML = '<span class="emoji">'+tier.emoji+'</span>Level: '+tier.name;
+    doneScore.innerHTML = 'Score <b>'+score+'</b>';
+    lastResult = { secs, errors, score, tier };
+
+    const run = { name: playerName(), secs, score, errors, ts: Date.now() };
+    recordScore(run);
+    renderLeaderboard();
+    submitScore(run).then(()=>{ if(lbScope==='global') renderLeaderboard(); });
+
+    const prev = loadBest();
+    if(prev === null || secs < prev){ localStorage.setItem('stroop_best', secs.toFixed(2)); doneMsg.textContent = '⭐ New best time!'; }
+    else { doneMsg.textContent = 'Best: '+prev.toFixed(1)+'s'; }
+    loadBest();
+    doneOv.classList.remove('hidden');
+  }
+
+  function exitGame(){
+    if(!playing && !countId) return;
+    buildRound();
+    startOv.classList.remove('hidden');
+    doneOv.classList.add('hidden');
+  }
+
+  // ---- share ----
+  function buildShareText(){
+    if(!lastResult) return '';
+    const r = lastResult;
+    const e = r.errors ? ' ('+r.errors+' miss'+(r.errors>1?'es':'')+')' : ' — perfect';
+    return 'Stroop Test — '+TRIALS+' trials\n⏱ '+r.secs.toFixed(1)+'s'+e+' — '+r.tier.emoji+' '+r.tier.name+'\n'+GAME_URL;
+  }
+  function flashCopied(msg){ copiedEl.textContent = msg; setTimeout(()=>{ copiedEl.textContent=''; }, 2400); }
+  async function shareResult(){
+    const text = buildShareText(); if(!text) return;
+    if(navigator.share){ try{ await navigator.share({title:'Stroop Test', text}); return; }catch(e){ if(e && e.name==='AbortError') return; } }
+    try{ await navigator.clipboard.writeText(text); flashCopied('Copied to clipboard!'); }
+    catch(_){ flashCopied('Press and hold to copy your result'); }
+  }
+
+  // ---- events ----
+  document.getElementById('startBtn').addEventListener('click', beginCountdown);
+  document.getElementById('againBtn').addEventListener('click', beginCountdown);
+  document.getElementById('restartBtn').addEventListener('click', beginCountdown);
+  document.getElementById('exitBtn').addEventListener('click', exitGame);
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') exitGame(); });
+  shareBtn.addEventListener('click', shareResult);
+  nameInput.addEventListener('input', ()=>{ localStorage.setItem(NAME_KEY, nameInput.value); renderLeaderboard(); });
+  clearLb.addEventListener('click', ()=>{
+    const me = playerName();
+    if(confirm('Clear '+me+"'s saved scores on this device? Other players' scores are kept.")){
+      saveScores(loadScores().filter(r => r.name.toLowerCase() !== me.toLowerCase()));
+      renderLeaderboard();
+    }
+  });
+  function setScope(scope){
+    lbScope = scope;
+    tabGlobal.classList.toggle('active', scope==='global');
+    tabDevice.classList.toggle('active', scope==='device');
+    renderLeaderboard();
+  }
+  tabGlobal.addEventListener('click', ()=>setScope('global'));
+  tabDevice.addEventListener('click', ()=>setScope('device'));
+
+  // ---- subtle digital rain ----
+  (function initRain(){
+    const cv = document.getElementById('rain'); if(!cv) return;
+    const ctx = cv.getContext('2d'); const fontSize=14, glyphs='0123456789';
+    let cols=0, drops=[], w=0, h=0;
+    function resize(){ w=cv.width=window.innerWidth; h=cv.height=window.innerHeight; cols=Math.max(1,Math.floor(w/fontSize)); drops=new Array(cols).fill(0).map(()=>Math.floor(Math.random()*-40)); }
+    let last=0;
+    function draw(ts){
+      if(ts-last>60){ last=ts;
+        ctx.fillStyle='rgba(15,18,32,0.14)'; ctx.fillRect(0,0,w,h);
+        ctx.font=fontSize+'px monospace'; ctx.fillStyle='#4ea1ff';
+        for(let i=0;i<cols;i++){ const ch=glyphs[Math.floor(Math.random()*glyphs.length)]; ctx.fillText(ch, i*fontSize, drops[i]*fontSize); if(drops[i]*fontSize>h && Math.random()>0.975){ drops[i]=0; } drops[i]++; }
+      }
+      requestAnimationFrame(draw);
+    }
+    resize(); window.addEventListener('resize', resize); requestAnimationFrame(draw);
+  })();
+
+  nameInput.value = localStorage.getItem(NAME_KEY) || '';
+  renderLeaderboard();
+  buildRound();
+})();
+</script>
+</body>
+</html>

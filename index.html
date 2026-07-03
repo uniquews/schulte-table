@@ -39,6 +39,11 @@
   }
   .subtitle{color:var(--muted);font-size:13px;margin:0;}
 
+  .tabs{display:inline-flex;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:4px;margin-bottom:12px;box-shadow:var(--shadow);}
+  .tab{text-decoration:none;color:var(--muted);font-weight:700;font-size:14px;padding:8px 18px;border-radius:9px;transition:background .12s,color .12s;}
+  .tab.active{background:var(--accent);color:#fff;}
+  .tab:not(.active):hover{color:var(--text);}
+
   .panel{
     width:100%;max-width:720px;background:linear-gradient(180deg,var(--panel),var(--bg-2));
     border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);
@@ -241,6 +246,10 @@
 <body>
   <canvas class="rain" id="rain" aria-hidden="true"></canvas>
   <button class="exit-btn" id="exitBtn" type="button" aria-label="Exit game">✕ Exit</button>
+  <nav class="tabs">
+    <a href="index.html" class="tab active">🔢 Schulte</a>
+    <a href="stroop.html" class="tab">🎨 Stroop</a>
+  </nav>
   <header>
     <h1>Schulte Table</h1>
     <p class="subtitle">Find the numbers 1 → N in order, as fast as you can.</p>
