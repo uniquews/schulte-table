@@ -38,5 +38,59 @@ console.log('best: none->12.3 =', bestUpdate(null,12.3), '(exp 12.3)');
 console.log('best: 12.3->10.1 =', bestUpdate(12.3,10.1), '(exp 10.1)');
 console.log('best: 10.1->15.0 =', bestUpdate(10.1,15.0), '(exp 10.1)');
 
+// ---- tier + score logic (mirrors index.html) ----
+function tierFor(secs, cells){
+  const spc = secs/cells;
+  if(spc < 0.45) return 'The One';
+  if(spc < 0.60) return 'Excellent';
+  if(spc < 0.80) return 'Good';
+  if(spc < 1.10) return 'Average';
+  return 'Beginner';
+}
+function scoreFor(secs, misclicks, cells){
+  return Math.max(0, Math.round(cells*1000/(secs + misclicks*2)));
+}
+function expect(label, got, want){
+  const ok = got === want;
+  console.log(`${label}: got ${got} (exp ${want}) -> ${ok?'PASS':'FAIL'}`);
+  ok?pass++:fail++;
+}
+
+console.log('\n--- tiers ---');
+expect('9x9 in 25s', tierFor(25, 81), 'The One');      // 0.31 s/cell -> elite
+expect('5x5 in 14s', tierFor(14, 25), 'Excellent');    // 0.56 s/cell
+expect('5x5 in 19s', tierFor(19, 25), 'Good');         // 0.76 s/cell
+expect('5x5 in 26s', tierFor(26, 25), 'Average');      // 1.04 s/cell
+expect('5x5 in 40s', tierFor(40, 25), 'Beginner');     // 1.6 s/cell
+
+console.log('\n--- score ---');
+expect('faster beats slower', scoreFor(20,0,25) > scoreFor(30,0,25), true);
+expect('misclicks lower score', scoreFor(20,3,25) < scoreFor(20,0,25), true);
+expect('score is non-negative', scoreFor(999,50,25) >= 0, true);
+
+// ---- leaderboard: fastest run per player for a size (mirrors index.html) ----
+function topScores(runs, sz, limit){
+  const best={};
+  for(const r of runs){
+    if(r.size!==sz) continue;
+    const k=r.name.toLowerCase();
+    if(!best[k] || r.secs<best[k].secs) best[k]=r;
+  }
+  return Object.values(best).sort((a,b)=>a.secs-b.secs).slice(0, limit||10);
+}
+console.log('\n--- leaderboard ---');
+const runs = [
+  {name:'Alice', size:5, secs:22.0, score:1100},
+  {name:'Alice', size:5, secs:18.5, score:1300},  // Alice improves -> keep best
+  {name:'Bob',   size:5, secs:15.0, score:1600},
+  {name:'Bob',   size:9, secs:30.0, score:2700},   // different size -> excluded from 5x5
+  {name:'carol', size:5, secs:40.0, score:600},
+];
+const board = topScores(runs, 5, 10);
+expect('only 5x5 players listed', board.length, 3);
+expect('sorted fastest first', board[0].name, 'Bob');
+expect('keeps player best run', board[1].secs, 18.5);   // Alice's 18.5, not 22.0
+expect('slowest player last', board[2].name, 'carol');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
