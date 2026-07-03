@@ -47,6 +47,8 @@
 
   .controls{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:center;}
   .field{display:flex;flex-direction:column;gap:6px;flex:1 1 0;min-width:120px;}
+  #modeField{flex-basis:100%;}          /* Modes get their own full-width row */
+  #modeField .toggles{justify-content:center;}
   .field label{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
   select{
     appearance:none;background:var(--panel-2);color:var(--text);border:1px solid var(--border);
@@ -157,6 +159,17 @@
   .lb-row.me{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
   .lb-empty{color:var(--muted);font-size:13px;text-align:center;margin:8px 0 2px;}
 
+  /* Poem mode */
+  body.poem #sizeField, body.poem #colorToggle, body.poem .lb-panel{ display:none; }
+  .poem-strip{ display:none; width:100%;max-width:520px;margin:0 auto 12px;text-align:center; }
+  body.poem .poem-strip{ display:block; }
+  .ps-line{ font-size:20px;letter-spacing:8px;line-height:1.85;padding-left:8px; }
+  .ps-ch{ color:var(--muted); }
+  .ps-ch.on{ color:var(--accent-2);font-weight:700; }
+  .done-poem{ margin:6px 0 2px; }
+  .dp-title{ font-weight:700;color:var(--text);margin-bottom:6px;font-size:15px; }
+  .dp-line{ color:var(--muted);font-size:16px;line-height:1.7;letter-spacing:4px;padding-left:4px; }
+
   /* Subtle Matrix digital rain behind everything */
   .rain{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.12;}
   body>*:not(.rain):not(.exit-btn){position:relative;z-index:1;}
@@ -217,7 +230,7 @@
 
     body.playing header,  body.counting header,
     body.playing .panel,  body.counting .panel,      /* controls + leaderboard */
-    body.playing .statbar,body.counting .statbar,    /* Time / Next / Best HUD */
+    body.playing:not(.poem) .statbar, body.counting:not(.poem) .statbar,  /* HUD (kept in poem mode) */
     body.playing .actions,body.counting .actions,
     body.playing footer,  body.counting footer{ display:none; }
 
@@ -239,7 +252,7 @@
         <label for="playerName">Your name</label>
         <input id="playerName" type="text" maxlength="14" placeholder="Enter nickname" autocomplete="off" spellcheck="false" />
       </div>
-      <div class="field">
+      <div class="field" id="sizeField">
         <label for="size">Grid size</label>
         <select id="size">
           <option value="3">3 × 3 (Easy)</option>
@@ -249,10 +262,11 @@
           <option value="7">7 × 7 (Hard)</option>
         </select>
       </div>
-      <div class="field">
+      <div class="field" id="modeField">
         <label>Modes</label>
         <div class="toggles">
-          <label class="toggle"><input type="checkbox" id="colorMode"> Color distraction</label>
+          <label class="toggle" id="colorToggle"><input type="checkbox" id="colorMode"> Color distraction</label>
+          <label class="toggle"><input type="checkbox" id="poemMode"> 诗词 Poem</label>
         </div>
       </div>
     </div>
@@ -264,11 +278,13 @@
     <div class="stat"><div class="k">Best</div><div class="v" id="best">—</div></div>
   </div>
 
+  <div class="poem-strip" id="poemStrip"></div>
+
   <div class="boardwrap">
     <div class="board" id="board"></div>
     <div class="overlay" id="startOverlay">
       <h2>Ready?</h2>
-      <p>Tap <b>Start</b>, then click 1 → highest in order.</p>
+      <p id="startHint">Tap <b>Start</b>, then click 1 → highest in order.</p>
       <button class="btn" id="startBtn">Start</button>
     </div>
     <div class="overlay count-overlay hidden" id="countOverlay">
@@ -277,6 +293,7 @@
     <div class="overlay hidden" id="doneOverlay">
       <h2>Done! 🎉</h2>
       <div class="big" id="doneTime">0.0s</div>
+      <div class="done-poem" id="donePoem" style="display:none"></div>
       <div class="rank" id="doneRank"></div>
       <div class="score-line" id="doneScore"></div>
       <p id="doneMsg">Nice work.</p>
@@ -333,6 +350,10 @@
   const shareBtn  = document.getElementById('shareBtn');
   const copiedEl  = document.getElementById('copied');
   const nameInput = document.getElementById('playerName');
+  const poemChk   = document.getElementById('poemMode');
+  const poemStrip = document.getElementById('poemStrip');
+  const donePoem  = document.getElementById('donePoem');
+  const startHint = document.getElementById('startHint');
   const lbList    = document.getElementById('lbList');
   const lbEmpty   = document.getElementById('lbEmpty');
   const lbTitle   = document.getElementById('lbTitle');
@@ -359,12 +380,40 @@
   let lbScope = 'global';  // 'global' | 'device'
   let lbReqId = 0;         // guards against out-of-order async fetches
   let countId = null;      // active countdown interval, if any
+  let poemMode = false, currentPoem = null, poemChars = [], cols = 5, rows = 5;
+
+  // A handful of famous 五言绝句 (20 chars each -> 4×5 grid), picked at random.
+  const POEMS = [
+    { title:'静夜思',   author:'李白',   lines:['床前明月光','疑是地上霜','举头望明月','低头思故乡'] },
+    { title:'春晓',     author:'孟浩然', lines:['春眠不觉晓','处处闻啼鸟','夜来风雨声','花落知多少'] },
+    { title:'登鹳雀楼', author:'王之涣', lines:['白日依山尽','黄河入海流','欲穷千里目','更上一层楼'] },
+    { title:'相思',     author:'王维',   lines:['红豆生南国','春来发几枝','愿君多采撷','此物最相思'] },
+    { title:'江雪',     author:'柳宗元', lines:['千山鸟飞绝','万径人踪灭','孤舟蓑笠翁','独钓寒江雪'] },
+  ];
+  function pickPoem(){ return POEMS[Math.floor(Math.random()*POEMS.length)]; }
 
   function shuffle(a){
     for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
     return a;
   }
-  function bestKey(){ return 'schulte_best_'+size+(colorChk.checked?'_c':''); }
+  function bestKey(){
+    if(poemMode) return 'schulte_poem_'+(currentPoem ? currentPoem.title : '');
+    return 'schulte_best_'+size+(colorChk.checked?'_c':'');
+  }
+  // Fill the poem strip in reading order as the player taps characters.
+  function updatePoemStrip(){
+    if(!currentPoem){ poemStrip.innerHTML = ''; return; }
+    const completed = target - 1;
+    poemStrip.innerHTML = currentPoem.lines.map((line, li)=>{
+      let row = '';
+      for(let ci=0; ci<line.length; ci++){
+        const idx = li*cols + ci;
+        const on  = idx < completed;
+        row += '<span class="ps-ch'+(on?' on':'')+'">'+(on?esc(line[ci]):'○')+'</span>';
+      }
+      return '<div class="ps-line">'+row+'</div>';
+    }).join('');
+  }
   function loadBest(){
     const v = localStorage.getItem(bestKey());
     bestEl.textContent = v ? (parseFloat(v).toFixed(1)+'s') : '—';
@@ -496,8 +545,7 @@
   }
 
   function buildBoard(){
-    size = parseInt(sizeSel.value,10);
-    total = size*size;
+    poemMode = poemChk.checked;
     target = 1; errors = 0; playing = false;
     document.body.classList.remove('playing');
     if(countId){ clearInterval(countId); countId = null; }
@@ -505,23 +553,44 @@
     countOv.classList.add('hidden');
     stopTimer();
     timeEl.textContent = '0.0s';
-    nextEl.textContent = '1';
+
+    let items;   // strings to place in the cells
+    if(poemMode){
+      currentPoem = pickPoem();
+      poemChars = currentPoem.lines.join('').split('');
+      cols = currentPoem.lines[0].length;
+      rows = currentPoem.lines.length;
+      total = poemChars.length;
+      items = poemChars.slice();
+      nextEl.textContent = poemChars[0];
+      boardEl.style.aspectRatio = cols+' / '+rows;
+      startHint.innerHTML = 'Tap <b>Start</b>, then tap the characters in order to complete the poem.';
+      updatePoemStrip();
+    } else {
+      size = parseInt(sizeSel.value,10);
+      cols = rows = size;
+      total = size*size;
+      items = [];
+      for(let i=1;i<=total;i++) items.push(String(i));
+      nextEl.textContent = '1';
+      boardEl.style.aspectRatio = '1 / 1';
+      startHint.innerHTML = 'Tap <b>Start</b>, then click 1 → highest in order.';
+    }
     loadBest();
 
-    boardEl.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
-    // Font scales with cell count
-    const fontSize = Math.max(14, Math.min(40, 320/size));
-    const nums = shuffle([...Array(total)].map((_,i)=>i+1));
+    boardEl.style.gridTemplateColumns = 'repeat('+cols+', 1fr)';
+    const fontSize = Math.max(16, Math.min(44, 300/cols));   // scales with columns
+    const order = shuffle(items.slice());
     boardEl.innerHTML = '';
-    nums.forEach((n,i)=>{
+    order.forEach((val,i)=>{
       const c = document.createElement('div');
       c.className = 'cell';
-      c.textContent = n;
-      c.dataset.n = n;
+      c.textContent = val;
+      c.dataset.val = val;
       c.style.fontSize = fontSize+'px';
       c.style.animationDelay = Math.min(i*12, 360)+'ms';  // staggered entrance, capped
-      if(colorChk.checked){ c.style.color = COLORS[Math.floor(Math.random()*COLORS.length)]; }
-      c.addEventListener('click', ()=>onCell(c,n));
+      if(!poemMode && colorChk.checked){ c.style.color = COLORS[Math.floor(Math.random()*COLORS.length)]; }
+      c.addEventListener('click', ()=>onCell(c, val));
       boardEl.appendChild(c);
     });
   }
@@ -579,13 +648,16 @@
     doneOv.classList.add('hidden');
   }
 
-  function onCell(cell, n){
+  function onCell(cell, val){
     if(!playing) return;
-    if(n === target){
+    if(cell.classList.contains('correct')) return;   // already matched (handles repeated characters)
+    const expected = poemMode ? poemChars[target-1] : String(target);
+    if(val === expected){
       cell.classList.add('correct');
       target++;
+      if(poemMode) updatePoemStrip();
       if(target > total){ finish(); }
-      else { nextEl.textContent = target; }
+      else { nextEl.textContent = poemMode ? poemChars[target-1] : String(target); }
     } else {
       errors++;
       cell.classList.remove('wrong'); void cell.offsetWidth;
@@ -604,19 +676,27 @@
     doneErr.textContent = errors ? (errors+' misclick'+(errors>1?'s':'')) : 'Flawless — no misclicks!';
 
     const secs = elapsed/1000;
-    const color = colorChk.checked;
+    const color = !poemMode && colorChk.checked;
     const tier = tierFor(secs, total, color);
     const score = scoreFor(secs, errors, total);
 
     doneRank.className = 'rank ' + tier.cls;
     doneRank.innerHTML = '<span class="emoji">'+tier.emoji+'</span>Level: '+tier.name;
     doneScore.innerHTML = 'Score <b>'+score+'</b>';
-    lastResult = { size, secs, errors, score, tier, color };
 
-    const run = { name: playerName(), size, secs, score, errors, color, ts: Date.now() };
-    recordScore(run);
-    renderLeaderboard();
-    submitScore(run).then(()=>{ if(lbScope === 'global') renderLeaderboard(); });
+    if(poemMode){
+      donePoem.style.display = 'block';
+      donePoem.innerHTML = '<div class="dp-title">《'+esc(currentPoem.title)+'》 '+esc(currentPoem.author)+'</div>'
+        + currentPoem.lines.map(l=>'<div class="dp-line">'+esc(l)+'</div>').join('');
+      lastResult = { secs, score, tier, poem: currentPoem.title };
+    } else {
+      donePoem.style.display = 'none';
+      lastResult = { size, secs, errors, score, tier, color };
+      const run = { name: playerName(), size, secs, score, errors, color, ts: Date.now() };
+      recordScore(run);
+      renderLeaderboard();
+      submitScore(run).then(()=>{ if(lbScope === 'global') renderLeaderboard(); });
+    }
 
     const prev = loadBest();
     if(prev === null || secs < prev){
@@ -633,6 +713,11 @@
   function buildShareText(){
     if(!lastResult) return '';
     const r = lastResult;
+    if(r.poem){
+      return '诗词 Schulte 《'+r.poem+'》\n'
+           + '⏱ '+r.secs.toFixed(1)+'s — '+r.tier.emoji+' '+r.tier.name+'\n'
+           + GAME_URL;
+    }
     const errTxt = r.errors ? ' ('+r.errors+' misclick'+(r.errors>1?'s':'')+')' : ' — flawless';
     return 'Schulte Table '+r.size+'×'+r.size+(r.color ? ' · Color' : '')+'\n'
          + '⏱ '+r.secs.toFixed(1)+'s — '+r.tier.emoji+' '+r.tier.name+'\n'
@@ -668,6 +753,13 @@
     }
   });
   colorChk.addEventListener('change', ()=>{ buildBoard(); startOv.classList.remove('hidden'); renderLeaderboard(); });
+  poemChk.addEventListener('change', ()=>{
+    document.body.classList.toggle('poem', poemChk.checked);
+    buildBoard();
+    startOv.classList.remove('hidden');
+    doneOv.classList.add('hidden');
+    renderLeaderboard();
+  });
   shareBtn.addEventListener('click', shareResult);
   document.getElementById('exitBtn').addEventListener('click', exitGame);
   document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') exitGame(); });

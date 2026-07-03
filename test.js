@@ -129,5 +129,25 @@ expect('keeps each name\'s fastest', g[1].secs, 18.5);  // Alice 18.5, not the 1
 expect('case-insensitive dedup', g.some(r=>r.name==='alice'), false);
 expect('limit is respected', dedupSortedByName(cloud, 2).length, 2);
 
+// ---- poem mode: click chars in order, matching by value + unused (mirrors onCell) ----
+console.log('\n--- poem mode ---');
+const poemChars = ['床前明月光','疑是地上霜','举头望明月','低头思故乡'].join('').split('');
+function simulatePoem(chars){
+  const board = chars.map(ch=>({ch, used:false})).reverse();  // reversed = a scrambled board
+  let target=1, errors=0; const total=chars.length;
+  while(target<=total){
+    const expected = chars[target-1];
+    const cell = board.find(c=>!c.used && c.ch===expected);   // any unused cell with that char
+    if(!cell){ errors++; break; }
+    cell.used=true; target++;
+  }
+  return { done:target>total, allUsed:board.every(c=>c.used), progress:target-1 };
+}
+const pr = simulatePoem(poemChars);
+expect('poem completes in order', pr.done, true);
+expect('every cell consumed (dupes handled)', pr.allUsed, true);
+expect('progress equals poem length', pr.progress, 20);
+expect('明 really is a duplicate', poemChars.filter(c=>c==='明').length, 2);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
