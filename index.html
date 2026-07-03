@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0f1220" />
+<title>Schulte Table — Brain Trainer</title>
+<style>
+  :root{
+    --bg:#0f1220;
+    --bg-2:#171a2b;
+    --panel:#1c2036;
+    --panel-2:#232847;
+    --text:#e8ebf7;
+    --muted:#9aa2c4;
+    --accent:#6c7bff;
+    --accent-2:#3ddc97;
+    --danger:#ff5d6c;
+    --cell:#232847;
+    --cell-hover:#2c3358;
+    --border:#2c3358;
+    --shadow:0 10px 30px rgba(0,0,0,.35);
+    --radius:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #1a1f38 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;
+    min-height:100%;padding:16px;
+  }
+  header{width:100%;max-width:720px;text-align:center;margin-bottom:14px;}
+  h1{font-size:22px;margin:0 0 2px;letter-spacing:.3px;font-weight:700;}
+  .subtitle{color:var(--muted);font-size:13px;margin:0;}
+
+  .panel{
+    width:100%;max-width:720px;background:linear-gradient(180deg,var(--panel),var(--bg-2));
+    border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:14px;margin-bottom:14px;
+  }
+
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;}
+  .field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:120px;}
+  .field label{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  select{
+    appearance:none;background:var(--panel-2);color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:10px 12px;font-size:15px;font-weight:600;cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%239aa2c4' viewBox='0 0 16 16'><path d='M4 6l4 4 4-4z'/></svg>");
+    background-repeat:no-repeat;background-position:right 10px center;padding-right:34px;
+  }
+  .toggles{display:flex;gap:10px;flex-wrap:wrap;}
+  .toggle{
+    display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--border);
+    border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;user-select:none;
+  }
+  .toggle input{accent-color:var(--accent);width:16px;height:16px;}
+
+  .statbar{display:flex;gap:10px;width:100%;max-width:720px;margin-bottom:14px;}
+  .stat{
+    flex:1;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    padding:12px;text-align:center;
+  }
+  .stat .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
+  .stat .v{font-size:24px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;}
+  .stat .v.accent{color:var(--accent-2);}
+
+  .boardwrap{position:relative;width:100%;max-width:560px;margin:0 auto 8px;}
+  .board{
+    display:grid;gap:8px;width:100%;aspect-ratio:1/1;
+    touch-action:manipulation;
+  }
+  .cell{
+    display:flex;align-items:center;justify-content:center;
+    background:var(--cell);border:1px solid var(--border);border-radius:12px;
+    font-weight:800;cursor:pointer;user-select:none;transition:transform .06s, background .12s, opacity .2s;
+    font-variant-numeric:tabular-nums;line-height:1;
+  }
+  .cell:hover{background:var(--cell-hover);}
+  .cell:active{transform:scale(.94);}
+  .cell.correct{background:var(--accent-2);color:#04231a;border-color:var(--accent-2);opacity:.55;}
+  .cell.wrong{background:var(--danger)!important;color:#2a0208;border-color:var(--danger);animation:shake .3s;}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+
+  .focus-dot{
+    position:absolute;top:50%;left:50%;width:16px;height:16px;border-radius:50%;
+    background:var(--accent);transform:translate(-50%,-50%);pointer-events:none;
+    box-shadow:0 0 0 6px rgba(108,123,255,.18);display:none;z-index:5;
+  }
+  body.focus .focus-dot{display:block;}
+
+  .overlay{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(15,18,32,.86);backdrop-filter:blur(3px);border-radius:var(--radius);text-align:center;padding:20px;z-index:10;
+  }
+  .overlay h2{margin:0 0 6px;font-size:26px;}
+  .overlay p{margin:2px 0;color:var(--muted);font-size:14px;}
+  .overlay .big{font-size:40px;font-weight:800;color:var(--accent-2);margin:8px 0;font-variant-numeric:tabular-nums;}
+  .hidden{display:none!important;}
+
+  .btn{
+    background:linear-gradient(180deg,var(--accent),#5765e6);color:#fff;border:none;border-radius:12px;
+    padding:14px 26px;font-size:16px;font-weight:800;cursor:pointer;margin-top:14px;box-shadow:var(--shadow);
+    transition:transform .06s, filter .12s;
+  }
+  .btn:hover{filter:brightness(1.08);}
+  .btn:active{transform:scale(.97);}
+  .btn.ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--border);box-shadow:none;}
+
+  .actions{display:flex;gap:10px;justify-content:center;width:100%;max-width:560px;margin:0 auto;}
+  .actions .btn{margin-top:0;flex:1;padding:12px 16px;font-size:15px;}
+
+  footer{color:var(--muted);font-size:12px;margin-top:18px;text-align:center;max-width:560px;line-height:1.5;}
+
+  @media (max-width:520px){
+    h1{font-size:19px;}
+    .board{gap:6px;}
+    .cell{border-radius:10px;}
+    .stat .v{font-size:20px;}
+    .field{min-width:100px;}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Schulte Table</h1>
+    <p class="subtitle">Find the numbers in order as fast as you can. Keep your eyes on the center.</p>
+  </header>
+
+  <div class="panel">
+    <div class="controls">
+      <div class="field">
+        <label for="size">Grid size</label>
+        <select id="size">
+          <option value="3">3 × 3 (Easy)</option>
+          <option value="4">4 × 4</option>
+          <option value="5" selected>5 × 5 (Classic)</option>
+          <option value="6">6 × 6</option>
+          <option value="7">7 × 7 (Hard)</option>
+        </select>
+      </div>
+      <div class="field" style="flex:2;">
+        <label>Modes</label>
+        <div class="toggles">
+          <label class="toggle"><input type="checkbox" id="focusMode"> Center-dot focus</label>
+          <label class="toggle"><input type="checkbox" id="colorMode"> Color distraction</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statbar">
+    <div class="stat"><div class="k">Time</div><div class="v" id="time">0.0s</div></div>
+    <div class="stat"><div class="k">Next</div><div class="v accent" id="next">1</div></div>
+    <div class="stat"><div class="k">Best</div><div class="v" id="best">—</div></div>
+  </div>
+
+  <div class="boardwrap">
+    <div class="board" id="board"></div>
+    <div class="focus-dot"></div>
+    <div class="overlay" id="startOverlay">
+      <h2>Ready?</h2>
+      <p>Tap <b>Start</b>, then click 1 → highest in order.</p>
+      <button class="btn" id="startBtn">Start</button>
+    </div>
+    <div class="overlay hidden" id="doneOverlay">
+      <h2>Done! 🎉</h2>
+      <div class="big" id="doneTime">0.0s</div>
+      <p id="doneMsg">Nice work.</p>
+      <p id="doneErrors"></p>
+      <button class="btn" id="againBtn">Play again</button>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn ghost" id="restartBtn">Restart</button>
+    <button class="btn ghost" id="shuffleBtn">New board</button>
+  </div>
+
+  <footer>
+    Schulte Tables train attention span, peripheral vision, and reading speed.
+    Try to keep your gaze fixed on the center dot and locate numbers with your side vision.
+    Best times are saved on this device.
+  </footer>
+
+<script>
+(function(){
+  const boardEl   = document.getElementById('board');
+  const sizeSel   = document.getElementById('size');
+  const focusChk  = document.getElementById('focusMode');
+  const colorChk  = document.getElementById('colorMode');
+  const timeEl    = document.getElementById('time');
+  const nextEl    = document.getElementById('next');
+  const bestEl    = document.getElementById('best');
+  const startOv   = document.getElementById('startOverlay');
+  const doneOv    = document.getElementById('doneOverlay');
+  const doneTime  = document.getElementById('doneTime');
+  const doneMsg   = document.getElementById('doneMsg');
+  const doneErr   = document.getElementById('doneErrors');
+
+  const COLORS = ['#6c7bff','#3ddc97','#ff5d6c','#ffb454','#c77dff','#4ec9ff'];
+
+  let size = 5, total = 25, target = 1, errors = 0;
+  let startTime = 0, timerId = null, playing = false;
+
+  function shuffle(a){
+    for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+    return a;
+  }
+  function bestKey(){ return 'schulte_best_'+size+(colorChk.checked?'_c':'')+(focusChk.checked?'_f':''); }
+  function loadBest(){
+    const v = localStorage.getItem(bestKey());
+    bestEl.textContent = v ? (parseFloat(v).toFixed(1)+'s') : '—';
+    return v ? parseFloat(v) : null;
+  }
+  function fmt(ms){ return (ms/1000).toFixed(1)+'s'; }
+
+  function buildBoard(){
+    size = parseInt(sizeSel.value,10);
+    total = size*size;
+    target = 1; errors = 0; playing = false;
+    stopTimer();
+    timeEl.textContent = '0.0s';
+    nextEl.textContent = '1';
+    document.body.classList.toggle('focus', focusChk.checked);
+    loadBest();
+
+    boardEl.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+    // Font scales with cell count
+    const fontSize = Math.max(14, Math.min(40, 320/size));
+    const nums = shuffle([...Array(total)].map((_,i)=>i+1));
+    boardEl.innerHTML = '';
+    nums.forEach(n=>{
+      const c = document.createElement('div');
+      c.className = 'cell';
+      c.textContent = n;
+      c.dataset.n = n;
+      c.style.fontSize = fontSize+'px';
+      if(colorChk.checked){ c.style.color = COLORS[Math.floor(Math.random()*COLORS.length)]; }
+      c.addEventListener('click', ()=>onCell(c,n));
+      boardEl.appendChild(c);
+    });
+  }
+
+  function startGame(){
+    startOv.classList.add('hidden');
+    doneOv.classList.add('hidden');
+    playing = true;
+    target = 1; errors = 0;
+    nextEl.textContent = '1';
+    startTime = performance.now();
+    startTimer();
+  }
+
+  function startTimer(){
+    stopTimer();
+    timerId = setInterval(()=>{
+      timeEl.textContent = fmt(performance.now()-startTime);
+    }, 100);
+  }
+  function stopTimer(){ if(timerId){clearInterval(timerId); timerId=null;} }
+
+  function onCell(cell, n){
+    if(!playing) return;
+    if(n === target){
+      cell.classList.add('correct');
+      target++;
+      if(target > total){ finish(); }
+      else { nextEl.textContent = target; }
+    } else {
+      errors++;
+      cell.classList.remove('wrong'); void cell.offsetWidth;
+      cell.classList.add('wrong');
+      setTimeout(()=>cell.classList.remove('wrong'), 320);
+    }
+  }
+
+  function finish(){
+    playing = false;
+    stopTimer();
+    const elapsed = performance.now()-startTime;
+    timeEl.textContent = fmt(elapsed);
+    doneTime.textContent = fmt(elapsed);
+    doneErr.textContent = errors ? (errors+' misclick'+(errors>1?'s':'')) : 'Flawless — no misclicks!';
+
+    const prev = loadBest();
+    const secs = elapsed/1000;
+    if(prev === null || secs < prev){
+      localStorage.setItem(bestKey(), secs.toFixed(2));
+      doneMsg.textContent = '⭐ New best time!';
+    } else {
+      doneMsg.textContent = 'Best: '+prev.toFixed(1)+'s';
+    }
+    loadBest();
+    doneOv.classList.remove('hidden');
+  }
+
+  // Events
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('againBtn').addEventListener('click', ()=>{ buildBoard(); startGame(); });
+  document.getElementById('restartBtn').addEventListener('click', ()=>{ buildBoard(); startGame(); });
+  document.getElementById('shuffleBtn').addEventListener('click', ()=>{ buildBoard(); startOv.classList.remove('hidden'); doneOv.classList.add('hidden'); });
+  sizeSel.addEventListener('change', ()=>{ buildBoard(); startOv.classList.remove('hidden'); });
+  focusChk.addEventListener('change', ()=>{ document.body.classList.toggle('focus', focusChk.checked); loadBest(); });
+  colorChk.addEventListener('change', ()=>{ buildBoard(); startOv.classList.remove('hidden'); });
+
+  buildBoard();
+})();
+</script>
+</body>
+</html>
